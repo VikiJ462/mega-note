@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mega Note</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <header>
+        <h1>Mega Note</h1>
+        <nav>
+            <button id="showRegisterBtn" class="nav-button">Registrace</button>
+            <button id="showLoginBtn" class="nav-button">Přihlášení</button>
+            <button id="logoutBtn" class="nav-button" style="display: none;">Odhlásit</button>
+        </nav>
+    </header>
+
+    <main>
+        <section id="registerSection" class="auth-section active">
+            <h2>Registrace</h2>
+            <form id="registerForm">
+                <input type="text" id="registerUsername" placeholder="Uživatelské jméno" required>
+                <input type="password" id="registerPassword" placeholder="Heslo" required>
+                <button type="submit">Registrovat</button>
+                <p id="registerMessage" class="message"></p>
+            </form>
+        </section>
+
+        <section id="loginSection" class="auth-section" style="display: none;">
+            <h2>Přihlášení</h2>
+            <form id="loginForm">
+                <input type="text" id="loginUsername" placeholder="Uživatelské jméno" required>
+                <input type="password" id="loginPassword" placeholder="Heslo" required>
+                <button type="submit">Přihlásit</button>
+                <p id="loginMessage" class="message"></p>
+            </form>
+        </section>
+
+        <section id="userDashboard" style="display: none;">
+            <h2>Vítejte, <span id="welcomeUsername"></span>!</h2>
+            <p>Vytvořte si nový odkaz nebo spravujte stávající.</p>
+            <button id="generateNoteBtn">Generovat nový odkaz</button>
+            <p id="generatedNoteLink" class="message"></p>
+
+            <h3>Vaše odkazy:</h3>
+            <ul id="userNotesList">
+                </ul>
+        </section>
+
+        <section id="sendMessageSection" style="display: none;">
+            <h2>Poslat zprávu na odkaz</h2>
+            <p>Odesíláte zprávu na odkaz: <strong id="currentNoteCode"></strong></p>
+            <form id="sendMessageForm">
+                <textarea id="messageContent" placeholder="Napište svou zprávu zde..." rows="5" required></textarea>
+                <button type="submit">Odeslat zprávu</button>
+                <p id="sendMessageMessage" class="message"></p>
+            </form>
+        </section>
+
+        <section id="viewMessagesSection" style="display: none;">
+            <h2>Zprávy pro odkaz: <span id="viewMessagesNoteCode"></span></h2>
+            <div id="messagesContainer">
+                </div>
+            <p id="viewMessagesMessage" class="message"></p>
+        </section>
+    </main>
+
+    <script src="/js/main.js"></script>
+</body>
+</html>
