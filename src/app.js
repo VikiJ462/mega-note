@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+const cors = require('cors'); // <--- PŘIDANÝ ŘÁDEK pro import cors balíčku
 require('dotenv').config(); // Pro načtení JWT_SECRET z .env souboru lokálně (na Renderu to bude z Environment Variables)
 
 // Import PostgreSQL poolu
@@ -10,6 +11,7 @@ const pool = require('./database');
 
 const app = express();
 app.use(express.json());
+app.use(cors()); // <--- PŘIDANÝ ŘÁDEK pro povolení CORS požadavků
 
 // Podávání statických souborů (frontend)
 // Předpokládá, že vaše statické soubory jsou ve složce 'public' v kořenovém adresáři projektu
