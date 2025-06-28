@@ -1,62 +1,68 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const auth = require('../middleware/auth'); // <--- OPRAVENÁ CESTA: Z routes do middleware
+const bcrypt = require('bcryptjs'); // PŘIDEJTE TENTO ŘÁDEK pro hashování hesel
+const auth = require('../middleware/auth'); // Cesta je správná: Z routes do middleware
 const { v4: uuidv4 } = require('uuid');
-const pool = require('../database'); // <--- OPRAVENÁ CESTA: Z routes do database
+const pool = require('../database'); // Cesta je správná: Z routes do database
 
 const router = express.Router();
 
 // --- Autentizace ---
-// POZNÁMKA: Tyto routy stále používají Mongoose logiku a budou muset být přepsány pro PostgreSQL!
 
-// Registrace uživatele
+// Registrace uživatele (PŘEPSÁNO PRO PostgreSQL)
 router.post('/register', async (req, res) => {
   const { username, password } = req.body;
   try {
-    const User = require('../models/User'); // <--- OPRAVENÁ CESTA: Z routes do models
-    const user = new User({ username, password });
-    await user.save();
-    res.status(201).json({ message: 'Uživatel úspěšně registrován!' });
-  } catch (error) {
-    if (error.code === 11000) {
+    // Zkontrolujeme, zda uživatel již existuje
+    const checkUser = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    if (checkUser.rows.length > 0) {
       return res.status(400).json({ message: 'Uživatelské jméno již existuje.' });
     }
-    console.error('Chyba při registraci uživatele (Mongoose logika):', error);
+
+    // Hashování hesla
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Vložení nového uživatele do PostgreSQL
+    await pool.query('INSERT INTO users (username, password) VALUES ($1, $2)', [username, hashedPassword]);
+    res.status(201).json({ message: 'Uživatel úspěšně registrován!' });
+  } catch (error) {
+    console.error('Chyba při registraci uživatele (PostgreSQL):', error);
     res.status(500).json({ message: 'Chyba při registraci uživatele.', error: error.message });
   }
 });
 
-// Přihlášení uživatele
+// Přihlášení uživatele (PŘEPSÁNO PRO PostgreSQL)
 router.post('/login', async (req, res) => {
   const { username, password } = req.body;
   try {
-    const User = require('../models/User'); // <--- OPRAVENÁ CESTA
-    const user = await User.findOne({ username });
+    // Najdeme uživatele podle uživatelského jména
+    const userResult = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    const user = userResult.rows[0];
+
     if (!user) {
       return res.status(400).json({ message: 'Neplatné uživatelské jméno nebo heslo.' });
     }
 
-    const isMatch = await user.matchPassword(password);
+    // Porovnáme zadané heslo s hashovaným heslem z DB
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ message: 'Neplatné uživatelské jméno nebo heslo.' });
     }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    // Generujeme JWT token. Důležité: do tokenu dáváme user.id z PostgreSQL!
+    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '1h' });
     res.json({ token, username: user.username });
   } catch (error) {
-    console.error('Chyba při přihlašování (Mongoose logika):', error);
+    console.error('Chyba při přihlašování (PostgreSQL):', error);
     res.status(500).json({ message: 'Chyba při přihlašování.', error: error.message });
   }
 });
 
 // --- Poznámky (Mega Note) ---
 
-// Generování nového odkazu (poznámky) - vyžaduje autentizaci
+// Generování nového odkazu (poznámky) - již přepsáno pro PostgreSQL
 router.post('/notes', auth, async (req, res) => {
   try {
-    // POZNÁMKA: Auth middleware (auth.js) také potřebuje být přepsán pro PostgreSQL
-    // v auth.js: `req.user = await User.findById(decoded.id).select('-password');`
-    // musí být změněno na `req.user = (await pool.query('SELECT id, username FROM users WHERE id = $1', [decoded.id])).rows[0];`
     const userId = req.user.id;
     const noteCode = uuidv4();
 
@@ -73,76 +79,101 @@ router.post('/notes', auth, async (req, res) => {
   }
 });
 
-// Získání všech poznámek uživatele - vyžaduje autentizaci
-// TATO LOGIKA POTŘEBUJE BÝT PŘEPSÁNA PRO PostgreSQL!
+// Získání všech poznámek uživatele (PŘEPSÁNO PRO PostgreSQL)
 router.get('/notes', auth, async (req, res) => {
   try {
-    const Note = require('../models/Note'); // <--- OPRAVENÁ CESTA
-    const notes = await Note.find({ userId: req.user.id }).select('noteCode createdAt');
-    res.json(notes);
+    // Načteme poznámky pro přihlášeného uživatele
+    const notesResult = await pool.query(
+      'SELECT id, note_code, created_at FROM notes WHERE user_id = $1 ORDER BY created_at DESC',
+      [req.user.id]
+    );
+    res.json(notesResult.rows);
   } catch (error) {
-    console.error('Chyba při načítání poznámek (Mongoose logika):', error);
+    console.error('Chyba při načítání poznámek (PostgreSQL):', error);
     res.status(500).json({ message: 'Chyba při načítání poznámek.', error: error.message });
   }
 });
 
-// Získání konkrétní poznámky (pro odesílatele a majitele)
-// TATO LOGIKA POTŘEBUJE BÝT PŘEPSÁNA PRO PostgreSQL!
+// Získání konkrétní poznámky (PŘEPSÁNO PRO PostgreSQL)
 router.get('/notes/:noteCode', async (req, res) => {
   try {
-    const Note = require('../models/Note'); // <--- OPRAVENÁ CESTA
-    const note = await Note.findOne({ noteCode: req.params.noteCode });
+    const noteCode = req.params.noteCode;
+    const noteResult = await pool.query(
+      'SELECT id, user_id, note_code, created_at FROM notes WHERE note_code = $1',
+      [noteCode]
+    );
+    const note = noteResult.rows[0];
+
     if (!note) {
       return res.status(404).json({ message: 'Poznámka nenalezena.' });
     }
-    if (req.user && note.userId.toString() === req.user.id) {
-        return res.json({ noteCode: note.noteCode, messages: note.messages });
+
+    // Pokud je uživatel autentizovaný a je majitelem poznámky, zobrazíme detaily (bez zpráv prozatím)
+    // Důležité: req.user.id je z auth middleware, musí být typu number/integer
+    // Porovnání user_id (z DB) a req.user.id (z tokenu)
+    if (req.user && note.user_id === req.user.id) {
+        // Zde by se načítaly i zprávy, pokud byste je měli v samostatné tabulce
+        return res.json({ noteCode: note.note_code, owner: true /*, messages: [] */ });
     }
-    res.json({ noteCode: note.noteCode });
+    // Pro neautentizované uživatele nebo ne-majitele zobrazíme jen, že odkaz existuje
+    res.json({ noteCode: note.note_code, owner: false });
   } catch (error) {
-    console.error('Chyba při načítání poznámky (Mongoose logika):', error);
+    console.error('Chyba při načítání poznámky (PostgreSQL):', error);
     res.status(500).json({ message: 'Chyba při načítání poznámky.', error: error.message });
   }
 });
 
-// Posílání zpráv na daný odkaz
-// TATO LOGIKA POTŘEBUJE BÝT PŘEPSÁNA PRO PostgreSQL!
+// Posílání zpráv na daný odkaz (PŘEPSÁNO PRO PostgreSQL)
 router.post('/notes/:noteCode/messages', async (req, res) => {
   const { content } = req.body;
+  const noteCode = req.params.noteCode;
   try {
-    const Note = require('../models/Note'); // <--- OPRAVENÁ CESTA
-    const note = await Note.findOne({ noteCode: req.params.noteCode });
+    // Najdeme ID poznámky podle noteCode
+    const noteResult = await pool.query('SELECT id FROM notes WHERE note_code = $1', [noteCode]);
+    const note = noteResult.rows[0];
+
     if (!note) {
       return res.status(404).json({ message: 'Poznámka nenalezena.' });
     }
 
-    note.messages.push({ content });
-    await note.save();
+    // Vložení zprávy do nové tabulky 'messages'
+    // TATO FUNKČNOST VYŽADUJE NOVOU TABULKU 'messages' V PostgreSQL!
+    await pool.query(
+      'INSERT INTO messages (note_id, content) VALUES ($1, $2)',
+      [note.id, content]
+    );
     res.status(201).json({ message: 'Zpráva úspěšně odeslána!' });
   } catch (error) {
-    console.error('Chyba při odesílání zprávy (Mongoose logika):', error);
+    console.error('Chyba při odesílání zprávy (PostgreSQL):', error);
     res.status(500).json({ message: 'Chyba při odesílání zprávy.', error: error.message });
   }
 });
 
-// Získání zpráv pro konkrétní poznámku (pouze pro majitele poznámky)
-// TATO LOGIKA POTŘEBUJE BÝT PŘEPSÁNA PRO PostgreSQL!
+// Získání zpráv pro konkrétní poznámku (pouze pro majitele poznámky) (PŘEPSÁNO PRO PostgreSQL)
 router.get('/notes/:noteCode/messages', auth, async (req, res) => {
     try {
-        const Note = require('../models/Note'); // <--- OPRAVENÁ CESTA
-        const note = await Note.findOne({ noteCode: req.params.noteCode });
+        const noteCode = req.params.noteCode;
+        const noteResult = await pool.query('SELECT id, user_id FROM notes WHERE note_code = $1', [noteCode]);
+        const note = noteResult.rows[0];
+
         if (!note) {
             return res.status(404).json({ message: 'Poznámka nenalezena.' });
         }
-        if (note.userId.toString() !== req.user.id) {
+        // Zkontrolujeme, zda je přihlášený uživatel majitelem poznámky
+        if (note.user_id !== req.user.id) {
             return res.status(403).json({ message: 'Nemáte oprávnění k zobrazení těchto zpráv.' });
         }
-        res.json(note.messages);
+
+        // Načteme zprávy z nové tabulky 'messages'
+        const messagesResult = await pool.query(
+            'SELECT content, created_at FROM messages WHERE note_id = $1 ORDER BY created_at ASC',
+            [note.id]
+        );
+        res.json(messagesResult.rows);
     } catch (error) {
-        console.error('Chyba při načítání zpráv (Mongoose logika):', error);
+        console.error('Chyba při načítání zpráv (PostgreSQL):', error);
         res.status(500).json({ message: 'Chyba při načítání zpráv.', error: error.message });
     }
 });
-
 
 module.exports = router;

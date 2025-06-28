@@ -34,7 +34,7 @@ pool.connect((err, client, done) => {
             console.log('Tabulka users je připravena v PostgreSQL.');
         }
 
-        // NOVÁ ČÁST: Vytvoření tabulky notes
+        // Vytvoření tabulky notes
         client.query(`
             CREATE TABLE IF NOT EXISTS notes (
                 id SERIAL PRIMARY KEY,
@@ -43,12 +43,28 @@ pool.connect((err, client, done) => {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `, (createNotesErr, notesRes) => {
-            done(); // Důležité: uvolněte klienta po všech operacích
             if (createNotesErr) {
                 console.error('Chyba při vytváření tabulky notes:', createNotesErr.message);
             } else {
                 console.log('Tabulka notes je připravena v PostgreSQL.');
             }
+
+            // NOVÁ ČÁST, KTERÁ CHYBĚLA: Vytvoření tabulky messages
+            client.query(`
+                CREATE TABLE IF NOT EXISTS messages (
+                    id SERIAL PRIMARY KEY,
+                    note_id INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+                    content TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            `, (createMessagesErr, messagesRes) => {
+                done(); // Důležité: uvolněte klienta po všech operacích
+                if (createMessagesErr) {
+                    console.error('Chyba při vytváření tabulky messages:', createMessagesErr.message);
+                } else {
+                    console.log('Tabulka messages je připravena v PostgreSQL.');
+                }
+            });
         });
     });
 });
