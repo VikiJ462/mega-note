@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const pool = require('../database'); // Import PostgreSQL poolu
+const pool = require('../database'); // Importujte pool pro PostgreSQL
 
 const auth = async (req, res, next) => {
   let token;
@@ -10,24 +10,23 @@ const auth = async (req, res, next) => {
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Místo User.findById použijeme pool.query pro PostgreSQL
-      const userResult = await pool.query(
-        'SELECT id, username FROM users WHERE id = $1',
-        [decoded.id]
-      );
+      // Místo User.findById(decoded.id) použijte pool.query pro PostgreSQL
+      const userResult = await pool.query('SELECT id, username FROM users WHERE id = $1', [decoded.id]);
       const user = userResult.rows[0];
 
       if (!user) {
-        return res.status(401).json({ message: 'Uživatel nenalezen, neautorizovaný přístup.' });
+        throw new Error('Uživatel nenalezen.');
       }
 
-      req.user = user; // Přidáme uživatele do requestu
-      next(); // Pokračujeme na další middleware/routě
+      req.user = user; // Nyní req.user má id a username z PostgreSQL
+      next();
     } catch (error) {
-      console.error("Chyba při ověřování tokenu nebo načítání uživatele z DB:", error);
-      res.status(401).json({ message: 'Neautorizovaný přístup, token selhal nebo vypršel.' });
+      console.error('Chyba ověření tokenu:', error.message); // Logujte chybu pro ladění
+      res.status(401).json({ message: 'Neautorizovaný přístup, token selhal nebo uživatel nenalezen.' });
     }
-  } else {
+  }
+
+  if (!token) {
     res.status(401).json({ message: 'Neautorizovaný přístup, žádný token.' });
   }
 };
