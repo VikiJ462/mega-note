@@ -28,12 +28,28 @@ pool.connect((err, client, done) => {
             password VARCHAR(255) NOT NULL
         );
     `, (createErr, res) => {
-        done();
         if (createErr) {
             console.error('Chyba při vytváření tabulky users:', createErr.message);
         } else {
             console.log('Tabulka users je připravena v PostgreSQL.');
         }
+
+        // NOVÁ ČÁST: Vytvoření tabulky notes
+        client.query(`
+            CREATE TABLE IF NOT EXISTS notes (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                note_code VARCHAR(255) UNIQUE NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `, (createNotesErr, notesRes) => {
+            done(); // Důležité: uvolněte klienta po všech operacích
+            if (createNotesErr) {
+                console.error('Chyba při vytváření tabulky notes:', createNotesErr.message);
+            } else {
+                console.log('Tabulka notes je připravena v PostgreSQL.');
+            }
+        });
     });
 });
 
